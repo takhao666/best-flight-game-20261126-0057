@@ -164,7 +164,7 @@ function stepFixed(steering) {
     audio.crash();
   }
   if (events & EVENT_TOUCHDOWN) {
-    missions.setMessage('Airborne!', 2);
+    missions.setMessage('Airborne — pull up ↑ to climb!', 3);
   }
   if (missions.mission.phase === 'failed') {
     endGame('time');
@@ -180,8 +180,10 @@ function snapCamera() {
   const p = plane.state;
   const fwd = new THREE.Vector3(Math.sin(p.heading), 0, Math.cos(p.heading));
   if (viewMode === 'cockpit') {
-    camPos.copy(p.pos).addScaledVector(fwd, 1.2);
-    camPos.y += 1.1;
+    // Ahead of the canopy and just above it: the nose sits below the frame and the
+    // view ahead is clear (the camera used to sit inside the canopy glass).
+    camPos.copy(p.pos).addScaledVector(fwd, 2.6);
+    camPos.y += 1.5;
     camLook.copy(p.pos).addScaledVector(fwd, 60);
     camLook.y += Math.sin(p.pitch) * 30;
   } else {
@@ -209,8 +211,8 @@ function updateCamera(dt) {
     look.copy(p.pos);
     look.y += 1;
   } else if (viewMode === 'cockpit') {
-    want.copy(p.pos).addScaledVector(fwd, 1.2);
-    want.y += 1.1;
+    want.copy(p.pos).addScaledVector(fwd, 2.6);
+    want.y += 1.5;
     look.copy(p.pos).addScaledVector(fwd, 60);
     look.y += Math.sin(p.pitch) * 30 - 2;
   } else {
@@ -303,7 +305,8 @@ function runGame() {
 
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+    const dt = Math.min((now - last) / 1000, MAX_FRAME);
+    accumulator += dt;
     last = now;
     handleActions();
     if (screen === 'play') {
@@ -318,7 +321,7 @@ function runGame() {
       // The title screen still drifts the plane gently for its backdrop.
       if (screen === 'title') plane.state.time += 1 / 60;
     }
-    updateCamera(1 / 60);
+    updateCamera(dt);
     draw();
   }
 
@@ -352,6 +355,7 @@ function runGame() {
   });
 
   setBest(best);
+  snapCamera(); // Start framed on the parked plane instead of lerping in from the origin.
   announce('Ridge Runner. Pick a mission to fly.');
   requestAnimationFrame(frame);
 }
@@ -387,7 +391,13 @@ window.__ridge = {
       onGround: p.onGround,
       crashed: p.crashed,
       landed: p.landed,
+      x: p.pos.x,
+      y: p.pos.y,
+      z: p.pos.z,
     };
+  },
+  get camera() {
+    return { x: camera.position.x, y: camera.position.y, z: camera.position.z, viewMode };
   },
   startMission(id) {
     const def = MISSIONS.find((m) => m.id === id);
