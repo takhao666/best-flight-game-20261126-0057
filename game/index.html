@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Ridge Runner — Alpine Courier</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1620; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hidden { display: none !important; }
+
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #eef4f8; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  .hud-box { position: absolute; background: rgba(10, 20, 32, .55); border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(2px); }
+  #hud-left { top: 14px; left: 14px; display: flex; gap: 22px; }
+  .hud-gauge { text-align: center; min-width: 74px; }
+  .hud-gauge .value { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .hud-gauge .unit { font-size: 11px; letter-spacing: .14em; color: #b9cdd9; margin-top: 3px; }
+  #hud-right { top: 14px; right: 14px; text-align: right; min-width: 210px; }
+  #hud-objective { font-size: 15px; font-weight: 650; }
+  #hud-timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  #hud-score-line { font-size: 13px; color: #cfe0ea; margin-top: 2px; }
+  #hud-bottom-left { left: 14px; bottom: 14px; width: 230px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; letter-spacing: .08em; }
+  .bar-row .label { width: 64px; color: #b9cdd9; }
+  .bar { flex: 1; height: 10px; background: rgba(255,255,255,.16); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; }
+  #hud-throttle-fill { background: #4fc3f7; width: 0%; }
+  #hud-fuel-fill { background: #7ed957; width: 100%; }
+  #hud-fuel-fill.low { background: #ff5347; }
+  #hud-damage-fill { background: #ffb02e; width: 0%; }
+  #hud-fuel-text { width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+  #hud-attitude-wrap { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); text-align: center; }
+  #hud-attitude { border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(10,20,32,.45); }
+  .att-label { font-size: 10px; letter-spacing: .18em; color: #b9cdd9; margin-top: 3px; }
+  #hud-message { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 26px; font-weight: 700; color: #ffd23f; text-align: center; }
+  #hud-warning { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: 800; color: #ff5347; letter-spacing: .06em; text-align: center; }
+  #hud-help { position: absolute; right: 14px; bottom: 14px; font-size: 12px; color: #cfe0ea; text-align: right; line-height: 1.6; }
+
+  /* ---- Overlays ---- */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6, 12, 20, .45); pointer-events: auto; }
+  .panel { background: rgba(10, 22, 34, .92); border: 1px solid rgba(255,255,255,.16); border-radius: 16px; padding: 28px 34px; max-width: 620px; width: calc(100% - 48px); color: #eef4f8; text-align: center; box-shadow: 0 18px 60px rgba(0,0,0,.5); }
+  .panel h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: .02em; }
+  .panel h1 .accent { color: #ff8a3d; }
+  .panel h2 { margin: 0 0 8px; font-size: 34px; }
+  .subtitle { color: #9fc0d4; margin: 0 0 18px; font-size: 15px; }
+  .missions { display: flex; flex-direction: column; gap: 10px; margin: 0 0 16px; text-align: left; }
+  .mission-btn { display: block; width: 100%; text-align: left; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2); border-radius: 10px; color: #eef4f8; padding: 12px 16px; cursor: pointer; font-family: inherit; }
+  .mission-btn:hover, .mission-btn:focus-visible { background: rgba(79,195,247,.22); border-color: #4fc3f7; outline: none; }
+  .mission-btn .m-name { font-size: 17px; font-weight: 700; }
+  .mission-btn .m-tag { font-size: 12px; color: #ffd23f; margin-left: 8px; }
+  .mission-btn .m-desc { font-size: 13px; color: #b9cdd9; margin-top: 3px; line-height: 1.45; }
+  .controls { font-size: 13px; color: #b9cdd9; line-height: 1.8; margin: 0 0 6px; }
+  .controls b { color: #eef4f8; }
+  #title-best { font-size: 13px; color: #ffd23f; margin: 8px 0 0; }
+  .big-btn { background: #ff8a3d; color: #1a1208; border: none; border-radius: 10px; padding: 12px 26px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 10px; }
+  .big-btn:hover { background: #ffa25e; }
+  .ghost-btn { background: transparent; color: #cfe0ea; border: 1px solid rgba(255,255,255,.35); border-radius: 10px; padding: 12px 20px; font-size: 15px; cursor: pointer; font-family: inherit; margin-top: 10px; margin-left: 8px; }
+  .ghost-btn:hover { border-color: #fff; color: #fff; }
+  .score-line { font-size: 17px; margin: 6px 0; }
+  .cause-line { color: #b9cdd9; font-size: 14px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Ridge Runner: fly the courier plane through rings and land on the runway"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="hud-left" class="hud-box">
+    <div class="hud-gauge"><div class="value" id="hud-speed">0</div><div class="unit">KNOTS</div></div>
+    <div class="hud-gauge"><div class="value" id="hud-alt">0</div><div class="unit">ALT FT</div></div>
+    <div class="hud-gauge"><div class="value" id="hud-hdg">090° E</div><div class="unit">HEADING</div></div>
+  </div>
+  <div id="hud-right" class="hud-box">
+    <div id="hud-objective">Ring Circuit · Ring 1/8</div>
+    <div id="hud-timer">0:00</div>
+    <div id="hud-score-line">Score <b id="hud-score">0</b></div>
+  </div>
+  <div id="hud-bottom-left" class="hud-box">
+    <div class="bar-row"><span class="label">THROTTLE</span><div class="bar"><div id="hud-throttle-fill"></div></div></div>
+    <div class="bar-row"><span class="label">FUEL</span><div class="bar"><div id="hud-fuel-fill"></div></div><span id="hud-fuel-text">100%</span></div>
+    <div class="bar-row"><span class="label">DAMAGE</span><div class="bar"><div id="hud-damage-fill"></div></div></div>
+  </div>
+  <div id="hud-attitude-wrap">
+    <canvas id="hud-attitude" width="120" height="120"></canvas>
+    <div class="att-label">ATTITUDE</div>
+  </div>
+  <div id="hud-warning"></div>
+  <div id="hud-message"></div>
+  <div id="hud-help">← → bank · ↑ ↓ pitch · Shift/Ctrl throttle<br>C cockpit view · P pause · M sound</div>
+</div>
+
+<div id="screen-title" class="overlay">
+  <div class="panel">
+    <h1>RIDGE <span class="accent">RUNNER</span></h1>
+    <p class="subtitle">Alpine courier — fly the valley, thread the rings, bring her home.</p>
+    <div class="missions">
+      <button class="mission-btn" data-mission="rings"><span class="m-name">1 · Ring Circuit</span><span class="m-tag">8 rings · beat the clock</span><div class="m-desc">Thread all 8 rings over the valley. Smooth flying wins: hard banks bleed speed, gentle turns keep it.</div></button>
+      <button class="mission-btn" data-mission="landing"><span class="m-name">2 · Runway Landing</span><span class="m-tag">Take off · 3 rings · land it</span><div class="m-desc">Take off from runway 09, fly the three guide rings, then bring her home. Touch down slow, level and on the strip.</div></button>
+      <button class="mission-btn" data-mission="dash"><span class="m-name">3 · Canyon Dash</span><span class="m-tag">10 rings · 55% fuel · timed</span><div class="m-desc">A low dash down the canyon. Fuel is tight — carry speed through the turns instead of firewalling the throttle.</div></button>
+    </div>
+    <p class="controls"><b>← →</b> bank &amp; turn · <b>↑ ↓</b> climb / dive · <b>Shift / Ctrl</b> or <b>E / Q</b> throttle · drag mouse to steer<br><b>C</b> camera · <b>P</b> pause · <b>M</b> sound · press <b>1 / 2 / 3</b> to pick a mission</p>
+    <p id="title-best">Best score: 0</p>
+  </div>
+</div>
+
+<div id="screen-pause" class="overlay hidden">
+  <div class="panel">
+    <h2>Paused</h2>
+    <p class="cause-line">The valley will wait for you.</p>
+    <button class="big-btn" id="pause-resume">Resume</button>
+  </div>
+</div>
+
+<div id="screen-over" class="overlay hidden">
+  <div class="panel">
+    <h2 id="over-title">Crashed!</h2>
+    <p class="cause-line" id="over-cause"></p>
+    <p class="score-line" id="over-score"></p>
+    <button class="big-btn" id="over-restart">Back to missions</button>
+  </div>
+</div>
+
+<div id="screen-done" class="overlay hidden">
+  <div class="panel">
+    <h2>Course complete!</h2>
+    <p class="score-line" id="done-score"></p>
+    <p class="cause-line">Keep flying free, or head back to pick another mission.</p>
+    <button class="big-btn" id="done-continue">Keep flying</button>
+    <button class="ghost-btn" id="done-menu">Missions</button>
+  </div>
+</div>
+
+<script src="./three.min.js"></script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
