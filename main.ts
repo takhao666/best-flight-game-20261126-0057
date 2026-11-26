@@ -1,41 +1,108 @@
-// A working best-game-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies game/ and
-// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. A starting point, not a winner: Block Dodger, a
-// plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a title screen,
-// score, lives and levels, game over and restart, flat colours and no sound. Build your own game
-// (any genre, any library you vendor under game/, or none), put your 3 or 4 PNG or JPEG screenshots
-// in screenshots/ (the first by name is the cover) and run it.
+// best-flight-game-20261126-0057 — hand-in program.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// The game lives in game/ (plain static files a desktop browser loads
+// offline) and screenshots/ holds 3–4 JPEGs or PNGs of it in play. This
+// program copies both into the grader's output directory and writes
+// dossier.json there — the summary the judge reads — built by the vendored
+// make.fun library (vendor/makefun-game.ts, untouched).
+//
+//   MAKEFUN_OUTPUT_DIR=/tmp/out node main.ts
+//
+// Without MAKEFUN_OUTPUT_DIR it writes to /output, the grader's directory.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const MIN_SCREENSHOTS = 3;
+const MAX_SCREENSHOTS = 4;
+const MAX_DOSSIER_BYTES = 1_572_864; // 1.5 MiB — the gate's dossier cap
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+function fail(message: string): never {
+  console.error(`main.ts: ${message}`);
+  process.exit(1);
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
+// Count the regular files under a directory, recursively, and their bytes.
+function treeStats(dir: string): { files: number; bytes: number } {
+  let files = 0;
+  let bytes = 0;
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const st = statSync(path);
+    if (st.isDirectory()) {
+      const sub = treeStats(path);
+      files += sub.files;
+      bytes += sub.bytes;
+    } else if (st.isFile()) {
+      files += 1;
+      bytes += st.size;
+    }
+  }
+  return { files, bytes };
+}
+
+function main(): void {
+  const root = fileURLToPath(new URL('.', import.meta.url));
+  const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+  const gameDir = join(root, 'game');
+  const shotsDir = join(root, 'screenshots');
+
+  // Refuse to hand in a broken entry instead of letting the gate reject it.
+  if (!existsSync(join(gameDir, 'index.html'))) {
+    fail('game/index.html is missing — the game has no entry page to hand in.');
+  }
+  if (!existsSync(shotsDir)) {
+    fail('screenshots/ is missing — the entry needs 3–4 screenshots.');
+  }
+  const shots = readdirSync(shotsDir).filter((name) => !name.startsWith('.'));
+  if (shots.length < MIN_SCREENSHOTS || shots.length > MAX_SCREENSHOTS) {
+    fail(
+      `screenshots/ holds ${shots.length} image(s); the gate needs ` +
+        `${MIN_SCREENSHOTS}–${MAX_SCREENSHOTS}.`,
+    );
+  }
+
+  const game = treeStats(gameDir);
+  const shotsStats = treeStats(shotsDir);
+
+  mkdirSync(outDir, { recursive: true });
+  cpSync(gameDir, join(outDir, 'game'), { recursive: true });
+  cpSync(shotsDir, join(outDir, 'screenshots'), { recursive: true });
+
+  // The scorer's own caps (kit reference/gate.json): only text_max_bytes
+  // shapes the dossier's bytes; the rest refuse an entry the scorer would
+  // refuse (more than 4 screenshots or one over 256 KiB; more than 993 files
+  // in game/ or 48 MiB of game files in all, or a path under game/ over
+  // 1000 bytes — game/ counts beside /output's own 1000-entry cap, its
+  // screenshots/ and dossier.json).
+  const dossier = buildDossier(outDir, {
     text_max_bytes: 163840,
     screenshots: { max: 4, max_bytes: 262144 },
     game_max_files: 993,
     game_max_bytes: 50331648,
     game_path_max_bytes: 1000,
-  }),
-);
+  });
+  const dossierPath = join(outDir, 'dossier.json');
+  writeFileSync(dossierPath, dossier);
+  const dossierBytes = statSync(dossierPath).size;
+  if (dossierBytes > MAX_DOSSIER_BYTES) {
+    fail(`dossier.json is ${dossierBytes} bytes, over the ${MAX_DOSSIER_BYTES}-byte cap.`);
+  }
+
+  console.log(
+    `handed in: game/ ${game.files} files, ${game.bytes} bytes; ` +
+      `screenshots/ ${shotsStats.files} files, ${shotsStats.bytes} bytes; ` +
+      `dossier.json ${dossierBytes} bytes`,
+  );
+}
+
+main();
