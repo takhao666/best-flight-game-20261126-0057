@@ -24,6 +24,7 @@ import { buildDossier } from './vendor/makefun-game.ts';
 
 const MIN_SCREENSHOTS = 3;
 const MAX_SCREENSHOTS = 4;
+const MAX_SCREENSHOT_BYTES = 262144; // 256 KiB — the gate's per-screenshot cap
 const MAX_DOSSIER_BYTES = 1_572_864; // 1.5 MiB — the gate's dossier cap
 
 function fail(message: string): never {
@@ -69,6 +70,17 @@ function main(): void {
       `screenshots/ holds ${shots.length} image(s); the gate needs ` +
         `${MIN_SCREENSHOTS}–${MAX_SCREENSHOTS}.`,
     );
+  }
+  // The gate caps each screenshot at 256 KiB; refuse an oversize one here
+  // with its name instead of letting the dossier build reject the entry.
+  for (const name of shots) {
+    const size = statSync(join(shotsDir, name)).size;
+    if (size > MAX_SCREENSHOT_BYTES) {
+      fail(
+        `screenshots/${name} is ${size} bytes, over the ` +
+          `${MAX_SCREENSHOT_BYTES}-byte cap per screenshot.`,
+      );
+    }
   }
 
   const game = treeStats(gameDir);
